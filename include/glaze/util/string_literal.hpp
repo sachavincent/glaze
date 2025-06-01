@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <array>
+#include <algorithm> // for std::copy_n
 #include <string_view>
 
 namespace glz
@@ -13,13 +13,6 @@ namespace glz
    template <size_t N>
    struct string_literal
    {
-      using value_type = char;
-      using reference = value_type&;
-      using const_reference = const value_type&;
-      using pointer = value_type*;
-      using const_pointer = const value_type*;
-      using size_type = size_t;
-
       static constexpr size_t length = (N > 0) ? (N - 1) : 0;
 
       [[nodiscard]] constexpr size_t size() const noexcept { return length; }
@@ -30,12 +23,7 @@ namespace glz
       constexpr string_literal& operator=(const string_literal&) noexcept = default;
       constexpr string_literal& operator=(string_literal&&) noexcept = default;
 
-      constexpr string_literal(const char (&str)[N]) noexcept
-      {
-         for (size_t i = 0; i < N; ++i) {
-            value[i] = str[i];
-         }
-      }
+      constexpr string_literal(const char (&str)[N]) noexcept { std::copy_n(str, N, value); }
 
       char value[N];
       constexpr const char* begin() const noexcept { return value; }
@@ -46,27 +34,22 @@ namespace glz
       [[nodiscard]] constexpr const std::string_view sv() const noexcept { return {value, length}; }
 
       [[nodiscard]] constexpr operator std::string_view() const noexcept { return {value, length}; }
-
-      constexpr reference operator[](size_type index) noexcept { return value[index]; }
-      constexpr const_reference operator[](size_type index) const noexcept { return value[index]; }
    };
 
    template <size_t N>
    constexpr auto string_literal_from_view(sv str)
    {
       string_literal<N + 1> sl{};
-      for (size_t i = 0; i < str.size(); ++i) {
-         sl[i] = str[i];
-      }
+      std::copy_n(str.data(), str.size(), sl.value);
       *(sl.value + N) = '\0';
       return sl;
    }
 
    template <string_literal Str>
-   inline constexpr std::string_view chars = Str.sv();
+   constexpr std::string_view chars = Str.sv();
 
    template <string_literal Str>
-   inline constexpr std::string_view root = Str.sv();
+   constexpr std::string_view root = Str.sv();
 
    namespace detail
    {
@@ -81,12 +64,12 @@ namespace glz
       {
          constexpr auto joined_arr = []() {
             constexpr size_t len = (Strs.size() + ... + 0);
-            std::array<char, len + 1> arr;
+            std::array<char, len + 1> arr{};
             auto append = [i = 0, &arr](const auto& s) mutable {
                for (auto c : s) arr[i++] = c;
             };
             (append(Strs), ...);
-            arr[len] = '\0';
+            arr[len] = 0;
             return arr;
          }();
          auto& static_arr = make_static<joined_arr>::value;
@@ -96,30 +79,5 @@ namespace glz
 
    // Helper to get the value out
    template <const std::string_view&... Strs>
-   inline constexpr auto join_v = detail::join<Strs...>();
-
-   template <const std::string_view& Key, bool Prettify = false>
-   inline constexpr auto quoted_key_v = []() -> std::string_view {
-      constexpr auto quoted = [] {
-         constexpr auto N = Key.size();
-         std::array<char, N + 4 + Prettify> result; // [quote, key, quote, colon, (prettify? space), null]
-         result[0] = '"';
-         for (size_t i = 0; i < N; ++i) {
-            result[i + 1] = Key[i];
-         }
-         result[N + 1] = '"';
-         result[N + 2] = ':';
-         if constexpr (Prettify) {
-            result[N + 3] = ' ';
-            result[N + 4] = '\0';
-         }
-         else {
-            result[N + 3] = '\0';
-         }
-         return result;
-      }();
-      // TODO: make_static required by GCC 12
-      auto& static_arr = detail::make_static<quoted>::value;
-      return {static_arr.data(), static_arr.size() - 1};
-   }();
+   constexpr auto join_v = detail::join<Strs...>();
 }

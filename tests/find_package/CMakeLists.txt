@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.18)
 
 project(
    glaze_example
@@ -7,11 +7,6 @@ project(
 )
 
 file(GLOB srcs src/*.cpp include/*.hpp)
-
-if(glaze_ERLANG_FORMAT)
-  list(APPEND CMAKE_MODULE_PATH "${EXTERNAL_MODULE_PATH}")
-  find_package(Erlang REQUIRED)
-endif(glaze_ERLANG_FORMAT)
 
 find_package(glaze CONFIG REQUIRED)
 

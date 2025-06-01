@@ -177,6 +177,10 @@ void tests()
 
    "unordered type name"_test = [] {
       {
+         std::string_view u = glz::name_v<std::unordered_set<std::vector<std::string>>>;
+         expect(u == "std::unordered_set<std::vector<std::string>>");
+      }
+      {
          std::string_view u = glz::name_v<std::unordered_map<uint64_t, std::string_view>>;
          expect(u == "std::unordered_map<uint64_t,std::string_view>");
       }
@@ -200,12 +204,7 @@ void tests()
 
    "span type name"_test = [] {
       std::string_view s = glz::name_v<std::span<double>>;
-      if constexpr (sizeof(size_t) == sizeof(uint64_t)) {
-         expect(s == "std::span<double,18446744073709551615>");
-      }
-      else if constexpr (sizeof(size_t) == sizeof(uint32_t)) {
-         expect(s == "std::span<double,4294967295>");
-      }
+      expect(s == "std::span<double,18446744073709551615>");
    };
 
    "tuple type name"_test = [] {
@@ -248,8 +247,8 @@ void tests()
       *io->get<int>("/x") = 1;
       *io2->get<int>("/x") = 5;
       std::string buffer{};
-      io2->write(glz::BEVE, "", buffer);
-      io->read(glz::BEVE, "", buffer);
+      io2->write(glz::binary, "", buffer);
+      io->read(glz::binary, "", buffer);
       expect(*io->get<int>("/x") == 5);
    };
 }

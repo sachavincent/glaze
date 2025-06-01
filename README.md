@@ -1,31 +1,23 @@
 # Glaze
 One of the fastest JSON libraries in the world. Glaze reads and writes from object memory, simplifying interfaces and offering incredible performance.
 
+> [!IMPORTANT]
+>
+> Version 2.8.0 adds write error handling which matches the read API. [See v2.8.0 Release notes](https://github.com/stephenberry/glaze/releases/tag/v2.8.0)
+
 Glaze also supports:
 
 - [BEVE](https://github.com/beve-org/beve) (binary efficient versatile encoding)
 - [CSV](./docs/csv.md) (comma separated value)
-- [EETF](./docs/EETF/erlang-external-term-format.md) (Erlang External Term Format) [optionally included]
-
-> [!IMPORTANT]
->
-> Glaze [v5.0.0](https://github.com/stephenberry/glaze/releases/tag/v5.0.0) has been released! See release for more details, but the critical changes are:
->
-> v5.0.0 removes the `detail` namespace from `to/from` specializations and many more internal functions, which enables cleaner user customization and shorter compiler error messages.
->
-> The `glz::opts` struct is now only the default options. Specialized options can be added to custom option structs. See [Options](./docs/options.md) for new compile time option customization. This reduces the length of compiler errors.
 
 ## With compile time reflection for MSVC, Clang, and GCC!
 
 - Read/write aggregate initializable structs without writing any metadata or macros!
-- See [example on Compiler Explorer](https://gcc.godbolt.org/z/T4To5fKfz)
+- See [example on Compiler Explorer](https://gcc.godbolt.org/z/85zKG3a4n)
 
 ## Highlights
 
 - Pure, compile time reflection for structs
-  - Powerful meta specialization system for custom names and behavior
-
-- JSON [RFC 8259](https://datatracker.ietf.org/doc/html/rfc8259) compliance with UTF-8 validation
 - Standard C++ library support
 - Header only
 - Direct to memory serialization/deserialization
@@ -34,7 +26,6 @@ Glaze also supports:
 - Use your own custom read/write functions ([Custom Read/Write](#custom-readwrite))
 - [Handle unknown keys](./docs/unknown-keys.md) in a fast and flexible manner
 - Direct memory access through [JSON pointer syntax](./docs/json-pointer-syntax.md)
-- [JMESPath](./docs/JMESPath.md) querying
 - [Binary data](./docs/binary.md) through the same API for maximum performance
 - No exceptions (compiles with `-fno-exceptions`)
   - If you desire helpers that throw for cleaner syntax see [Glaze Exceptions](./docs/exceptions.md)
@@ -53,14 +44,14 @@ See [DOCS](https://github.com/stephenberry/glaze/tree/main/docs) for more docume
 
 | Library                                                      | Roundtrip Time (s) | Write (MB/s) | Read (MB/s) |
 | ------------------------------------------------------------ | ------------------ | ------------ | ----------- |
-| [**Glaze**](https://github.com/stephenberry/glaze)           | **1.04**           | **1366**     | **1224**    |
-| [**simdjson (on demand)**](https://github.com/simdjson/simdjson) | **N/A**            | **N/A**      | **1198**    |
-| [**yyjson**](https://github.com/ibireme/yyjson)              | **1.23**           | **1005**     | **1107**    |
-| [**daw_json_link**](https://github.com/beached/daw_json_link) | **2.93**           | **365**      | **553**     |
-| [**RapidJSON**](https://github.com/Tencent/rapidjson)        | **3.65**           | **290**      | **450**     |
-| [**Boost.JSON (direct)**](https://boost.org/libs/json)       | **4.76**           | **199**      | **447**     |
-| [**json_struct**](https://github.com/jorgen/json_struct)     | **5.50**           | **182**      | **326**     |
-| [**nlohmann**](https://github.com/nlohmann/json)             | **15.71**          | **84**       | **80**      |
+| [**Glaze**](https://github.com/stephenberry/glaze)           | **1.20**           | **1064**     | **1175**    |
+| [**simdjson (on demand)**](https://github.com/simdjson/simdjson) | **N/A**            | **N/A**      | **1201**    |
+| [**yyjson**](https://github.com/ibireme/yyjson)              | **1.23**           | **996**      | **1108**    |
+| [**daw_json_link**](https://github.com/beached/daw_json_link) | **2.90**           | **370**      | **554**     |
+| [**RapidJSON**](https://github.com/Tencent/rapidjson)        | **3.63**           | **295**      | **447**     |
+| [**Boost.JSON (direct)**](https://boost.org/libs/json)       | **4.66**           | **203**      | **437**     |
+| [**json_struct**](https://github.com/jorgen/json_struct)     | **5.47**           | **184**      | **331**     |
+| [**nlohmann**](https://github.com/nlohmann/json)             | **15.00**          | **86**       | **82**      |
 
 [Performance test code available here](https://github.com/stephenberry/json_performance)
 
@@ -72,8 +63,8 @@ See [DOCS](https://github.com/stephenberry/glaze/tree/main/docs) for more docume
 
 | Library                                                      | Read (MB/s) |
 | ------------------------------------------------------------ | ----------- |
-| [**Glaze**](https://github.com/stephenberry/glaze)           | **678**     |
-| [**simdjson (on demand)**](https://github.com/simdjson/simdjson) | **93**      |
+| [**Glaze**](https://github.com/stephenberry/glaze)           | **1426**    |
+| [**simdjson (on demand)**](https://github.com/simdjson/simdjson) | **108**     |
 
 ## Binary Performance
 
@@ -81,8 +72,8 @@ Tagged binary specification: [BEVE](https://github.com/stephenberry/beve)
 
 | Metric                | Roundtrip Time (s) | Write (MB/s) | Read (MB/s) |
 | --------------------- | ------------------ | ------------ | ----------- |
-| Raw performance       | **0.42**           | **3235**     | **2468**    |
-| Equivalent JSON data* | **0.42**           | **3547**     | **2706**    |
+| Raw performance       | **0.44**           | **3168**     | **2350**    |
+| Equivalent JSON data* | **0.44**           | **3474**     | **2577**    |
 
 JSON size: 670 bytes
 
@@ -90,11 +81,7 @@ BEVE size: 611 bytes
 
 *BEVE packs more efficiently than JSON, so transporting the same data is even faster.
 
-## Examples
-
-> [!TIP]
->
-> See the [example_json](https://github.com/stephenberry/glaze/blob/main/tests/example_json/example_json.cpp) unit test for basic examples of how to use Glaze. See [json_test](https://github.com/stephenberry/glaze/blob/main/tests/json_test/json_test.cpp) for an extensive test of features.
+## Example
 
 Your struct will automatically get reflected! No metadata is required by the user.
 
@@ -181,23 +168,15 @@ auto ec = glz::write_file_json(obj, "./obj.json", std::string{});
 
 ## Compiler/System Support
 
-- Requires C++23
-- Tested for both 64bit and 32bit
+- Requires C++20
+- Only tested on 64bit systems, but should run on 32bit systems
 - Only supports little-endian systems
 
-[Actions](https://github.com/stephenberry/glaze/actions) build and test with [Clang](https://clang.llvm.org) (17+), [MSVC](https://visualstudio.microsoft.com/vs/features/cplusplus/) (2022), and [GCC](https://gcc.gnu.org) (12+) on apple, windows, and linux.
+[Actions](https://github.com/stephenberry/glaze/actions) build and test with [Clang](https://clang.llvm.org) (15+), [MSVC](https://visualstudio.microsoft.com/vs/features/cplusplus/) (2022), and [GCC](https://gcc.gnu.org) (12+) on apple, windows, and linux.
 
 ![clang build](https://github.com/stephenberry/glaze/actions/workflows/clang.yml/badge.svg) ![gcc build](https://github.com/stephenberry/glaze/actions/workflows/gcc.yml/badge.svg) ![msvc build](https://github.com/stephenberry/glaze/actions/workflows/msvc.yml/badge.svg) 
 
-> Glaze seeks to maintain compatibility with the latest three versions of GCC and Clang, as well as the latest version of MSVC and Apple Clang (Xcode). And, we aim to only drop old versions with major releases.
-
-### MSVC Compiler Flags
-
-Glaze requires a C++ standard conformant pre-processor, which requires the `/Zc:preprocessor` flag when building with MSVC.
-
-### SIMD CMake Options
-
-The CMake has the option `glaze_ENABLE_AVX2`. This will attempt to use `AVX2` SIMD instructions in some cases to improve performance, as long as the system you are configuring on supports it. Set this option to `OFF` to disable the AVX2 instruction set, such as if you are cross-compiling for Arm. If you aren't using CMake the macro `GLZ_USE_AVX2` enables the feature if defined.
+> Glaze seeks to maintain compatibility with the latest three versions of GCC and Clang, as well as the latest version of MSVC and Apple Clang.
 
 ## How To Use Glaze
 
@@ -237,8 +216,7 @@ import libs = libglaze%lib{glaze}
 
 ### Arch Linux
 
-- [Official Arch repository](https://archlinux.org/packages/extra/any/glaze/)
-- AUR git package: [glaze-git](https://aur.archlinux.org/packages/glaze-git)
+- AUR packages: [glaze](https://aur.archlinux.org/packages/glaze) and [glaze-git](https://aur.archlinux.org/packages/glaze-git)
 
 ### See this [Example Repository](https://github.com/stephenberry/glaze_example) for how to use Glaze in a new project
 
@@ -248,7 +226,7 @@ import libs = libglaze%lib{glaze}
 
 # Explicit Metadata
 
-If you want to specialize your reflection then you can **optionally** write the code below:
+If you want to specialize your reflection then you can optionally write the code below:
 
 > This metadata is also necessary for non-aggregate initializable structs.
 
@@ -268,7 +246,7 @@ struct glz::meta<my_struct> {
 
 ## Local Glaze Meta
 
-<details><summary>Glaze also supports metadata within its associated class:</summary>
+Glaze also supports metadata provided within its associated class:
 
 ```c++
 struct my_struct
@@ -291,8 +269,6 @@ struct my_struct
   };
 };
 ```
-
-</details>
 
 ## Custom Key Names or Unnamed Types
 
@@ -319,47 +295,16 @@ struct glz::meta<my_struct> {
 > Names are required for:
 >
 > - static constexpr member variables
-> - [Wrappers](./docs/wrappers.md)
+> - Wrappers
 > - Lambda functions
 
-# Reflection API
+## Custom Read/Write
 
-Glaze provides a compile time reflection API that can be modified via `glz::meta` specializations. This reflection API uses pure reflection unless a `glz::meta` specialization is provided, in which case the default behavior is overridden by the developer.
+Custom reading and writing can be achieved through the powerful `to_json`/`from_json` specialization approach, which is described here: [custom-serialization.md](https://github.com/stephenberry/glaze/blob/main/docs/custom-serialization.md). However, this only works for user defined types.
 
-```c++
-static_assert(glz::reflect<my_struct>::size == 5); // Number of fields
-static_assert(glz::reflect<my_struct>::keys[0] == "i"); // Access keys
-```
+For common use cases or cases where a specific member variable should have special reading and writing, you can use `glz::custom` to register read/write member functions, std::functions, or lambda functions.
 
-> [!WARNING]
->
-> The `glz::reflect` fields described above have been formalized and are unlikely to change. Other fields may evolve as we continue to formalize the spec.
-
-## glz::for_each_field
-
-```c++
-struct test_type {
-   int32_t int1{};
-   int64_t int2{};
-};
-
-test_type var{42, 43};
-
-glz::for_each_field(var, [](auto& field) {
-    field += 1;
-});
-
-expect(var.int1 == 43);
-expect(var.int2 == 44);
-```
-
-# Custom Read/Write
-
-Custom reading and writing can be achieved through the powerful `to`/`from` specialization approach, which is described here: [custom-serialization.md](https://github.com/stephenberry/glaze/blob/main/docs/custom-serialization.md). However, this only works for user defined types.
-
-For common use cases or cases where a specific member variable should have special reading and writing, you can use [glz::custom](https://github.com/stephenberry/glaze/blob/main/docs/wrappers.md#custom) to register read/write member functions, std::functions, or lambda functions.
-
-<details><summary>See example:</summary>
+See an example:
 
 ```c++
 struct custom_encoding
@@ -416,88 +361,7 @@ suite custom_encoding_test = [] {
 };
 ```
 
-</details>
-
-<details><summary>Another example with constexpr lambdas:</summary>
-
-```c++
-struct custom_buffer_input
-{
-   std::string str{};
-};
-
-template <>
-struct glz::meta<custom_buffer_input>
-{
-   static constexpr auto read_x = [](custom_buffer_input& s, const std::string& input) { s.str = input; };
-   static constexpr auto write_x = [](auto& s) -> auto& { return s.str; };
-   static constexpr auto value = glz::object("str", glz::custom<read_x, write_x>);
-};
-
-suite custom_lambdas_test = [] {
-   "custom_buffer_input"_test = [] {
-      std::string s = R"({"str":"Hello!"})";
-      custom_buffer_input obj{};
-      expect(!glz::read_json(obj, s));
-      expect(obj.str == "Hello!");
-      s.clear();
-      expect(!glz::write_json(obj, s));
-      expect(s == R"({"str":"Hello!"})");
-      expect(obj.str == "Hello!");
-   };
-};
-```
-
-</details>
-
-### Error handling with `glz::custom`
-
-Developers can throw errors, but for builds that disable exceptions or if it is desirable to integrate error handling within Glaze's `context`, the last argument of custom lambdas may be a `glz::context&`. This enables custom error handling that integrates well with the rest of Glaze.
-
-<details><summary>See example:</summary>
-
-```c++
-struct age_custom_error_obj
-{
-   int age{};
-};
-
-template <>
-struct glz::meta<age_custom_error_obj>
-{
-   using T = age_custom_error_obj;
-   static constexpr auto read_x = [](T& s, int age, glz::context& ctx) {
-      if (age < 21) {
-         ctx.error = glz::error_code::constraint_violated;
-         ctx.custom_error_message = "age too young";
-      }
-      else {
-         s.age = age;
-      }
-   };
-   static constexpr auto value = object("age", glz::custom<read_x, &T::age>);
-};
-```
-
-In use:
-```c++
-age_custom_error_obj obj{};
-std::string s = R"({"age":18})";
-auto ec = glz::read_json(obj, s);
-auto err_msg = glz::format_error(ec, s);
-std::cout << err_msg << '\n';
-```
-
-Console output:
-```
-1:10: constraint_violated
-   {"age":18}
-            ^ age too young
-```
-
-</details>
-
-# Object Mapping
+## Object Mapping
 
 When using member pointers (e.g. `&T::a`) the C++ class structures must match the JSON interface. It may be desirable to map C++ classes with differing layouts to the same object interface. This is accomplished through registering lambda functions instead of member pointers.
 
@@ -516,7 +380,7 @@ Lambda functions by default copy returns, therefore the `auto&` return type is t
 
 > Note that remapping can also be achieved through pointers/references, as glaze treats values, pointers, and references in the same manner when writing/reading.
 
-# Value Types
+## Value Types
 
 A class can be treated as an underlying value as follows:
 
@@ -539,87 +403,6 @@ struct glz::meta<S> {
   static constexpr auto value = [](auto& self) -> auto& { return self.x; };
 };
 ```
-
-# Read Constraints
-
-Glaze provides a wrapper to enable complex reading constraints for struct members: `glz::read_constraint`.
-
-```c++
-struct constrained_object
-{
-   int age{};
-   std::string name{};
-};
-
-template <>
-struct glz::meta<constrained_object>
-{
-   using T = constrained_object;
-   static constexpr auto limit_age = [](const T&, int age) {
-      return (age >= 0 && age <= 120);
-   };
-   
-   static constexpr auto limit_name = [](const T&, const std::string& name) {
-      return name.size() <= 8;
-   };
-   
-   static constexpr auto value = object("age", read_constraint<&T::age, limit_age, "Age out of range">, //
-                                        "name", read_constraint<&T::name, limit_name, "Name is too long">);
-};
-```
-
-For invalid input such as `{"age": -1, "name": "Victor"}`, Glaze will outut the following formatted error message:
-
-```
-1:11: constraint_violated
-   {"age": -1, "name": "Victor"}
-             ^ Age out of range
-```
-
-- Member functions can also be registered as the constraint. 
-- The first field of the constraint lambda is the parent object, allowing complex constraints to be written by the user.
-
-# Reading/Writing Private Fields
-
-Serialize and deserialize private fields by making a `glz::meta<T>` and adding `friend struct glz::meta<T>;` to your class.
-
-<details><summary>See example:</summary>
-
-```c++
-class private_fields_t
-{
-private:
-   double cash = 22.0;
-   std::string currency = "$";
-
-   friend struct glz::meta<private_fields_t>;
-};
-
-template <>
-struct glz::meta<private_fields_t>
-{
-   using T = private_fields_t;
-   static constexpr auto value = object(&T::cash, &T::currency);
-};
-
-suite private_fields_tests = []
-{
-   "private fields"_test = [] {
-      private_fields_t obj{};
-      std::string buffer{};
-      expect(not glz::write_json(obj, buffer));
-      expect(buffer == R"({"cash":22,"currency":"$"})");
-      
-      buffer = R"({"cash":2200.0, "currency":"¢"})";
-      expect(not glz::read_json(obj, buffer));
-      buffer.clear();
-      expect(not glz::write_json(obj, buffer));
-      expect(buffer == R"({"cash":2200,"currency":"¢"})");
-   };
-};
-```
-
-</details>
 
 # Error Handling
 
@@ -651,30 +434,6 @@ Produces this error:
 ```
 
 Denoting that x is invalid here.
-
-# Input Buffer (Null) Termination
-
-A non-const `std::string` is recommended for input buffers, as this allows Glaze to improve performance with temporary padding and the buffer will be null terminated.
-
-## JSON
-
-By default the option `null_terminated` is set to `true` and null-terminated buffers must be used when parsing JSON. The option can be turned off with a small loss in performance, which allows non-null terminated buffers:
-
-```c++
-constexpr glz::opts options{.null_terminated = false};
-auto ec = glz::read<options>(value, buffer); // read in a non-null terminated buffer
-```
-
-## BEVE
-
-Null-termination is not required when parsing BEVE (binary). It makes no difference in performance.
-
-## CSV
-
-> [!WARNING]
->
-> Currently, `null_terminated = false` is not valid for CSV parsing and buffers must be null terminated.
-
 
 # Type Support
 
@@ -767,6 +526,35 @@ expect(buffer == "\"Red\"");
 Comments are supported with the specification defined here: [JSONC](https://github.com/stephenberry/JSONC)
 
 Read support for comments is provided with `glz::read_jsonc` or `glz::read<glz::opts{.comments = true}>(...)`.
+
+Comments may be included in the `glz::meta` description for your types. These comments can be written out to provide a description of your JSON interface. Calling `write_jsonc` as opposed to `write_json` will write out any comments included in the `meta` description.
+
+```c++
+struct thing {
+  double x{5.0};
+  int y{7};
+};
+
+template <>
+struct glz::meta<thing> {
+   using T = thing;
+   static constexpr auto value = object(
+      &T::x, "x is a double"_c,
+      &T::y, "y is an int"_c
+   );
+};
+```
+
+Prettified output:
+
+```json
+{
+  "x": 5 /*x is a double*/,
+  "y": 7 /*y is an int*/
+}
+```
+
+> The `_c` is necessary if member object pointer names are reflected. You can also write `comment("x is a double")`
 
 # Prettify JSON
 
@@ -903,7 +691,7 @@ buffer.resize(n);
 
 ## Compile Time Options
 
-The `glz::opts` struct defines the default compile time options for reading/writing.
+The `glz::opts` struct defines compile time optional settings for reading/writing.
 
 Instead of calling `glz::read_json(...)`, you can call `glz::read<glz::opts{}>(...)` and customize the options.
 
@@ -911,24 +699,17 @@ For example: `glz::read<glz::opts{.error_on_unknown_keys = false}>(...)` will tu
 
 `glz::opts` can also switch between formats:
 
-- `glz::read<glz::opts{.format = glz::BEVE}>(...)` -> `glz::read_beve(...)`
-- `glz::read<glz::opts{.format = glz::JSON}>(...)` -> `glz::read_json(...)`
+- `glz::read<glz::opts{.format = glz::binary}>(...)` -> `glz::read_binary(...)`
+- `glz::read<glz::opts{.format = glz::json}>(...)` -> `glz::read_json(...)`
 
-> [!IMPORTANT]
->
-> Many options for Glaze are not part of `glz::opts`. This keeps compiler errors shorter and makes options more manageable. See [Options](./docs/options.md) documentation for more details on available compile time options.
+## Available Compile Time Options
 
-### Available Default Compile Time Options
-
-The struct below shows the available options in `glz::opts` and the defaults. See [Options](./docs/options.md) for additional options for user customization.
+The struct below shows the available options and the default behavior.
 
 ```c++
-struct opts
-{
-  // USER CONFIGURABLE
-  uint32_t format = JSON;
-  bool null_terminated = true; // Whether the input buffer is null terminated
-  bool comments = false; // Support reading in JSONC style comments
+struct opts {
+  uint32_t format = json;
+  bool comments = false; // Write out or support reading in JSONC style comments
   bool error_on_unknown_keys = true; // Error when an unknown key is encountered
   bool skip_null_members = true; // Skip writing out params in an object if the value is null
   bool use_hash_comparison = true; // Will replace some string equality checks with hash checks
@@ -937,54 +718,45 @@ struct opts
   char indentation_char = ' '; // Prettified JSON indentation char
   uint8_t indentation_width = 3; // Prettified JSON indentation size
   bool new_lines_in_arrays = true; // Whether prettified arrays should have new lines for each element
-  bool append_arrays = false; // When reading into an array the data will be appended if the type supports it
   bool shrink_to_fit = false; // Shrinks dynamic containers to new size to save memory
   bool write_type_info = true; // Write type info for meta objects in variants
+  bool force_conformance = false; // Do not allow invalid json normally accepted such as nan, inf.
   bool error_on_missing_keys = false; // Require all non nullable keys to be present in the object. Use
                                       // skip_null_members = false to require nullable members
+
   bool error_on_const_read =
      false; // Error if attempt is made to read into a const value, by default the value is skipped without error
+
+  uint32_t layout = rowwise; // CSV row wise output/input
+
+  // The maximum precision type used for writing floats, higher precision floats will be cast down to this precision
+  float_precision float_max_write_precision{};
 
   bool bools_as_numbers = false; // Read and write booleans with 1's and 0's
 
   bool quoted_num = false; // treat numbers as quoted or array-like types as having quoted numbers
-  bool number = false; // treats all types like std::string as numbers: read/write these quoted numbers
+  bool number = false; // read numbers as strings and write these string as numbers
   bool raw = false; // write out string like values without quotes
   bool raw_string = false; // do not decode/encode escaped characters for strings (improves read/write performance)
-  bool structs_as_arrays = false; // Handle structs (reading/writing) without keys, which applies
+  bool structs_as_arrays = false; // Handle structs (reading/writing) without keys, which applies to reflectable and
 
   bool partial_read =
-     false; // Reads into the deepest structural object and then exits without parsing the rest of the input
+     false; // Reads into only existing fields and elements and then exits without parsing the rest of the input
+
+  // glaze_object_t concepts
+  bool partial_read_nested = false; // Advance the partially read struct to the end of the struct
+  bool concatenate = true; // Concatenates ranges of std::pair into single objects when writing
+
+  bool hide_non_invocable =
+     true; // Hides non-invocable members from the cli_menu (may be applied elsewhere in the future)
 };
 ```
 
 > Many of these compile time options have wrappers to apply the option to only a single field. See [Wrappers](./docs/wrappers.md) for more details.
 
-## JSON Conformance
-
-By default Glaze is strictly conformant with the latest JSON standard except in two cases with associated options:
-
-- `validate_skipped`
-  This option does full JSON validation for skipped values when parsing. This is not set by default because values are typically skipped when the user is unconcerned with them, and Glaze still validates for major issues. But, this makes skipping faster by not caring if the skipped values are exactly JSON conformant. For example, by default Glaze will ensure skipped numbers have all valid numerical characters, but it will not validate for issues like leading zeros in skipped numbers unless `validate_skipped` is on. Wherever Glaze parses a value to be used it is fully validated.
-- `validate_trailing_whitespace`
-  This option validates the trailing whitespace in a parsed document. Because Glaze parses C++ structs, there is typically no need to continue parsing after the object of interest has been read. Turn on this option if you want to ensure that the rest of the document has valid whitespace, otherwise Glaze will just ignore the content after the content of interest has been parsed.
-
-> [!NOTE]
->
-> By default, Glaze does not unicode escape control characters (e.g. `"\x1f"` to `"\u001f"`), as this poses a risk of embedding null characters and other invisible characters in strings. The compile time option `escape_control_characters` is available for those who desire to write out control characters as escaped unicode in strings.
->
-> ```c++
-> // Example options for enabling escape_control_characters
-> struct options : glz::opts {
->    bool escape_control_characters = true;
-> };
-> ```
-
 ## Skip
 
 It can be useful to acknowledge a keys existence in an object to prevent errors, and yet the value may not be needed or exist in C++. These cases are handled by registering a `glz::skip` type with the meta data.
-
-<details><summary>See example:</summary>
 
 ```c++
 struct S {
@@ -1005,15 +777,11 @@ glz::read_json(s, buffer);
 expect(s.i == 7); // only the value i will be read into
 ```
 
-</details>
-
 ## Hide
 
 Glaze is designed to help with building generic APIs. Sometimes a value needs to be exposed to the API, but it is not desirable to read in or write out the value in JSON. This is the use case for `glz::hide`.
 
 `glz::hide` hides the value from JSON output while still allowing API (and JSON pointer) access.
-
-<details><summary>See example:</summary>
 
 ```c++
 struct hide_struct {
@@ -1036,8 +804,6 @@ hide_struct s{};
 auto b = glz::write_json(s);
 expect(b == R"({"i":287,"d":3.14})"); // notice that "hello" is hidden from the output
 ```
-
-</details>
 
 ## Quoted Numbers
 
@@ -1079,10 +845,6 @@ auto ec = glz::read_ndjson(x, s);
 ### [Data Recorder](./docs/recorder.md)
 
 ### [Command Line Interface Menu](./docs/cli-menu.md)
-
-### [JMESPath](./docs/JMESPath.md)
-
-- Querying JSON
 
 ### [JSON Include System](./docs/json-include.md)
 

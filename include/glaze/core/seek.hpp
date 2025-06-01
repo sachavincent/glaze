@@ -3,11 +3,9 @@
 
 #pragma once
 
-#include "glaze/core/custom.hpp"
 #include "glaze/core/read.hpp"
-#include "glaze/core/reflect.hpp"
 #include "glaze/core/write.hpp"
-#include "glaze/util/glaze_fast_float.hpp"
+#include "glaze/reflection/reflect.hpp"
 
 // Use JSON Pointer syntax to seek to a specific element
 // https://github.com/stephenberry/JSON-Pointer
@@ -16,22 +14,22 @@ namespace glz::detail
 {
    template <class F, class T>
       requires glaze_value_t<T>
-   bool seek_impl(F&& func, T&& value, sv json_ptr);
+   bool seek_impl(F&& func, T&& value, sv json_ptr) noexcept;
 
    template <class F, class T>
       requires glaze_array_t<T> || tuple_t<std::decay_t<T>> || array_t<std::decay_t<T>> || is_std_tuple<std::decay_t<T>>
-   bool seek_impl(F&& func, T&& value, sv json_ptr);
+   bool seek_impl(F&& func, T&& value, sv json_ptr) noexcept;
 
    template <class F, class T>
       requires nullable_t<std::decay_t<T>>
-   bool seek_impl(F&& func, T&& value, sv json_ptr);
+   bool seek_impl(F&& func, T&& value, sv json_ptr) noexcept;
 
    template <class F, class T>
       requires readable_map_t<T> || glaze_object_t<T> || reflectable<T>
-   bool seek_impl(F&& func, T&& value, sv json_ptr);
+   bool seek_impl(F&& func, T&& value, sv json_ptr) noexcept;
 
    template <class F, class T>
-   bool seek_impl(F&& func, T&& value, sv json_ptr)
+   bool seek_impl(F&& func, T&& value, sv json_ptr) noexcept
    {
       if (json_ptr.empty()) {
          func(value);
@@ -43,7 +41,7 @@ namespace glz::detail
    // TODO: compile time search for `~` and optimize if escape does not exist
    template <class F, class T>
       requires readable_map_t<T> || glaze_object_t<T> || reflectable<T>
-   bool seek_impl(F&& func, T&& value, sv json_ptr)
+   bool seek_impl(F&& func, T&& value, sv json_ptr) noexcept
    {
       if (json_ptr.empty()) {
          func(value);
@@ -83,12 +81,11 @@ namespace glz::detail
          }
          json_ptr = json_ptr.substr(i);
       }
-      else if constexpr (std::floating_point<Key>) {
-         auto [ptr, ec] = glz::from_chars<false>(json_ptr.data(), json_ptr.data() + json_ptr.size(), key);
-         if (ec != std::errc()) [[unlikely]] {
-            return false;
-         }
-         json_ptr = json_ptr.substr(size_t(ptr - json_ptr.data()));
+      else if constexpr (std::is_floating_point_v<Key>) {
+         auto it = json_ptr.data();
+         auto s = parse_float<Key>(key, it);
+         if (!s) return false;
+         json_ptr = json_ptr.substr(size_t(it - json_ptr.data()));
       }
       else {
          auto [p, ec] = std::from_chars(&json_ptr[1], json_ptr.data() + json_ptr.size(), key);
@@ -97,26 +94,29 @@ namespace glz::detail
       }
 
       if constexpr (glaze_object_t<T> || reflectable<T>) {
-         static constexpr auto N = reflect<T>::size;
-         static constexpr auto HashInfo = hash_info<T>;
-         static_assert(HashInfo.type != hash_type::invalid, "Hashing failed");
+         decltype(auto) frozen_map = [&]() -> decltype(auto) {
+            if constexpr (reflectable<T>) {
+#if ((defined _MSC_VER) && (!defined __clang__))
+               static thread_local auto cmap = make_map<T>();
+#else
+               static thread_local constinit auto cmap = make_map<T>();
+#endif
+               populate_map(value, cmap); // Function required for MSVC to build
+               return cmap;
+            }
+            else {
+               static constexpr auto cmap = make_map<T>();
+               return cmap;
+            }
+         }();
 
-         const auto index = decode_hash_with_size<JSON_PTR, T, HashInfo, HashInfo.type>::op(
-            key.data(), key.data() + key.size(), key.size());
-
-         if (index < N) [[likely]] {
-            bool ret{};
-            visit<N>(
-               [&]<size_t I>() {
-                  if constexpr (reflectable<T>) {
-                     ret = seek_impl(std::forward<F>(func), get_member(value, get<I>(to_tie(value))), json_ptr);
-                  }
-                  else {
-                     ret = seek_impl(std::forward<F>(func), get_member(value, get<I>(reflect<T>::values)), json_ptr);
-                  }
+         const auto& member_it = frozen_map.find(key);
+         if (member_it != frozen_map.end()) [[likely]] {
+            return std::visit(
+               [&](auto&& member_ptr) {
+                  return seek_impl(std::forward<F>(func), get_member(value, member_ptr), json_ptr);
                },
-               index);
-            return ret;
+               member_it->second);
          }
          else [[unlikely]] {
             return false;
@@ -129,7 +129,7 @@ namespace glz::detail
 
    template <class F, class T>
       requires glaze_array_t<T> || tuple_t<std::decay_t<T>> || array_t<std::decay_t<T>> || is_std_tuple<std::decay_t<T>>
-   bool seek_impl(F&& func, T&& value, sv json_ptr)
+   bool seek_impl(F&& func, T&& value, sv json_ptr) noexcept
    {
       if (json_ptr.empty()) {
          func(value);
@@ -146,7 +146,9 @@ namespace glz::detail
          static constexpr auto member_array = glz::detail::make_array<decay_keep_volatile_t<T>>();
          if (index >= member_array.size()) return false;
          return std::visit(
-            [&](auto&& element) { return seek_impl(std::forward<F>(func), get_member(value, element), json_ptr); },
+            [&](auto&& member_ptr) {
+               return seek_impl(std::forward<F>(func), get_member(value, member_ptr), json_ptr);
+            },
             member_array[index]);
       }
       else if constexpr (tuple_t<std::decay_t<T>> || is_std_tuple<std::decay_t<T>>) {
@@ -162,7 +164,7 @@ namespace glz::detail
 
    template <class F, class T>
       requires nullable_t<std::decay_t<T>>
-   bool seek_impl(F&& func, T&& value, sv json_ptr)
+   bool seek_impl(F&& func, T&& value, sv json_ptr) noexcept
    {
       if (json_ptr.empty()) {
          func(value);
@@ -174,7 +176,7 @@ namespace glz::detail
 
    template <class F, class T>
       requires glaze_value_t<T>
-   bool seek_impl(F&& func, T&& value, sv json_ptr)
+   bool seek_impl(F&& func, T&& value, sv json_ptr) noexcept
    {
       decltype(auto) member = get_member(value, meta_wrapper_v<std::remove_cvref_t<T>>);
       if (json_ptr.empty()) {
@@ -189,7 +191,7 @@ namespace glz
 {
    // Call a function on an value at the location of a json_ptr
    template <class F, class T>
-   bool seek(F&& func, T&& value, sv json_ptr)
+   bool seek(F&& func, T&& value, sv json_ptr) noexcept
    {
       return detail::seek_impl(std::forward<F>(func), std::forward<T>(value), json_ptr);
    }
@@ -197,7 +199,7 @@ namespace glz
    // Get a refrence to a value at the location of a json_ptr. Will error if
    // value doesnt exist or is wrong type
    template <class V, class T>
-   expected<std::reference_wrapper<V>, error_ctx> get(T&& root_value, sv json_ptr)
+   expected<std::reference_wrapper<V>, error_ctx> get(T&& root_value, sv json_ptr) noexcept
    {
       V* result{};
       error_code ec{};
@@ -250,7 +252,7 @@ namespace glz
       detail::seek_impl(
          [&](auto&& val) {
             if constexpr (std::is_assignable_v<V, decltype(val)> &&
-                          non_narrowing_convertable<std::decay_t<decltype(val)>, V>) {
+                          detail::non_narrowing_convertable<std::decay_t<decltype(val)>, V>) {
                found = true;
                result = val;
             }
@@ -278,7 +280,8 @@ namespace glz
       detail::seek_impl(
          [&](auto&& val) {
             if constexpr (std::is_assignable_v<decltype(val), decltype(value)> &&
-                          non_narrowing_convertable<std::decay_t<decltype(value)>, std::decay_t<decltype(val)>>) {
+                          detail::non_narrowing_convertable<std::decay_t<decltype(value)>,
+                                                            std::decay_t<decltype(val)>>) {
                result = true;
 #if defined(__GNUC__) || defined(__GNUG__)
 #pragma GCC diagnostic push
@@ -304,7 +307,7 @@ namespace glz
 
    // call a member function
    template <class R, class T, class... Args>
-   call_return_t<R> call(T&& root_value, sv json_ptr, Args&&... args)
+   call_return_t<R> call(T&& root_value, sv json_ptr, Args&&... args) noexcept
    {
       call_result_t<R> result{};
 
@@ -495,7 +498,7 @@ namespace glz
          n_items_per_group[i] = std::count(first_keys.begin(), first_keys.end(), unique_keys[i]);
       }
 
-      return glz::tuple{n_items_per_group, n_unique, unique_keys};
+      return glz::tuplet::tuple{n_items_per_group, n_unique, unique_keys};
    }
 
    template <auto Arr, std::size_t... Is>
@@ -523,7 +526,7 @@ namespace glz
       auto arrs = make_arrays<n_items_per_group>(std::make_index_sequence<n_unique>{});
       size_t start{};
 
-      for_each<n_unique>([&]<auto I>() {
+      for_each<n_unique>([&](auto I) {
          constexpr size_t n_items = n_items_per_group[I];
 
          glz::get<I>(arrs).first = unique_keys[I];
@@ -534,52 +537,59 @@ namespace glz
       return arrs;
    }
 
+   template <class T, string_literal key_str>
+   struct member_getter
+   {
+      static constexpr auto frozen_map = detail::make_map<T>();
+      static constexpr auto member_it = frozen_map.find(key_str.sv());
+   };
+
    // TODO support custom types
-   template <class Root, string_literal ptr, class Expected = void>
+   template <class Root_t, string_literal ptr, class Expected_t = void>
    constexpr bool valid()
    {
-      using V = std::decay_t<Root>;
+      using V = std::decay_t<Root_t>;
       if constexpr (ptr.sv() == sv{""}) {
-         return std::same_as<Expected, void> || std::same_as<V, Expected>;
+         return std::same_as<Expected_t, void> || std::same_as<V, Expected_t>;
       }
       else {
          constexpr auto tokens = tokenize_json_ptr(ptr.sv());
          constexpr auto key_str = tokens.first;
          constexpr auto rem_ptr = glz::string_literal_from_view<tokens.second.size()>(tokens.second);
-         if constexpr (glz::glaze_object_t<V>) {
-            constexpr auto& HashInfo = hash_info<V>;
-            constexpr auto I = decode_hash_with_size<JSON, V, HashInfo, HashInfo.type>::op(
-               key_str.data(), key_str.data() + key_str.size(), key_str.size());
+         if constexpr (glz::detail::glaze_object_t<V>) {
+            constexpr auto string_literal_key = glz::string_literal_from_view<key_str.size()>(key_str);
+            using G = member_getter<V, string_literal_key>;
+            if constexpr (G::member_it != G::frozen_map.end()) {
+               constexpr auto& element = G::member_it->second;
+               constexpr auto I = element.index();
+               constexpr auto& member_ptr = get<I>(element);
 
-            if constexpr (I < reflect<V>::size) {
-               if constexpr (key_str != reflect<V>::keys[I]) {
-                  return false;
-               }
-               using T = refl_t<V, I>;
+               using mptr_t = std::decay_t<decltype(member_ptr)>;
+               using T = detail::member_t<V, mptr_t>;
                if constexpr (is_specialization_v<T, includer>) {
-                  return valid<file_include, rem_ptr, Expected>();
+                  return valid<file_include, rem_ptr, Expected_t>();
                }
                else {
-                  return valid<T, rem_ptr, Expected>();
+                  return valid<T, rem_ptr, Expected_t>();
                }
             }
             else {
                return false;
             }
          }
-         else if constexpr (glz::writable_map_t<V>) {
-            return valid<typename V::mapped_type, rem_ptr, Expected>();
+         else if constexpr (glz::detail::writable_map_t<V>) {
+            return valid<typename V::mapped_type, rem_ptr, Expected_t>();
          }
-         else if constexpr (glz::glaze_array_t<V>) {
+         else if constexpr (glz::detail::glaze_array_t<V>) {
             constexpr auto member_array = glz::detail::make_array<std::decay_t<V>>();
-            constexpr auto optional_index = stoui(key_str); // TODO: Will not build if not int
+            constexpr auto optional_index = glz::detail::stoui(key_str); // TODO: Will not build if not int
             if constexpr (optional_index) {
                constexpr auto index = *optional_index;
                if constexpr (index >= 0 && index < member_array.size()) {
                   constexpr auto member = member_array[index];
                   constexpr auto member_ptr = std::get<member.index()>(member);
-                  using sub_t = decltype(glz::get_member(std::declval<V>(), member_ptr));
-                  return valid<sub_t, rem_ptr, Expected>();
+                  using sub_t = decltype(glz::detail::get_member(std::declval<V>(), member_ptr));
+                  return valid<sub_t, rem_ptr, Expected_t>();
                }
                else {
                   return false;
@@ -589,15 +599,15 @@ namespace glz
                return false;
             }
          }
-         else if constexpr (glz::array_t<V>) {
-            if (stoui(key_str)) {
-               return valid<range_value_t<V>, rem_ptr, Expected>();
+         else if constexpr (glz::detail::array_t<V>) {
+            if (glz::detail::stoui(key_str)) {
+               return valid<range_value_t<V>, rem_ptr, Expected_t>();
             }
             return false;
          }
-         else if constexpr (glz::nullable_t<V>) {
+         else if constexpr (glz::detail::nullable_t<V>) {
             using sub_t = decltype(*std::declval<V>());
-            return valid<sub_t, ptr, Expected>();
+            return valid<sub_t, ptr, Expected_t>();
          }
          else {
             return false;

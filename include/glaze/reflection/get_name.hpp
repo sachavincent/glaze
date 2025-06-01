@@ -20,9 +20,6 @@
 // For struct fields
 namespace glz::detail
 {
-   // Do not const qualify this value to avoid duplicate `to_tie` template instantiations with rest of Glaze
-   // Temporary fix: const qualify it despite. Caused issues with reflect begin/end indices
-   // See https://github.com/stephenberry/glaze/issues/1568
    template <class T>
    extern const T external;
 
@@ -93,7 +90,7 @@ namespace glz
    };
 
    template <auto N, class T>
-   inline constexpr auto member_nameof = []() constexpr { return member_nameof_impl<N, T>::stripped_literal; }();
+   constexpr auto member_nameof = []() constexpr { return member_nameof_impl<N, T>::stripped_literal; }();
 
    template <class T>
    constexpr auto type_name = [] {
@@ -112,12 +109,7 @@ namespace glz
    template <class T, size_t... I>
    [[nodiscard]] constexpr auto member_names_impl(std::index_sequence<I...>)
    {
-      if constexpr (sizeof...(I) == 0) {
-         return std::array<sv, 0>{};
-      }
-      else {
-         return std::array{member_nameof<I, T>...};
-      }
+      return std::array{member_nameof<I, T>...};
    }
 
    template <class T>
@@ -195,7 +187,7 @@ namespace glz
    }
 
    template <auto E>
-      requires(std::is_enum_v<decltype(E)> && std::is_scoped_enum_v<decltype(E)>)
+      requires(std::is_enum_v<decltype(E)>)
    consteval auto get_name()
    {
 #if defined(_MSC_VER) && !defined(__clang__)
@@ -205,21 +197,6 @@ namespace glz
 #else
       std::string_view str = GLZ_PRETTY_FUNCTION;
       str = str.substr(str.rfind("::") + 2);
-      return str.substr(0, str.find(']'));
-#endif
-   }
-
-   template <auto E>
-      requires(std::is_enum_v<decltype(E)> && not std::is_scoped_enum_v<decltype(E)>)
-   consteval auto get_name()
-   {
-#if defined(_MSC_VER) && !defined(__clang__)
-      std::string_view str = GLZ_PRETTY_FUNCTION;
-      str = str.substr(str.rfind("= ") + 2);
-      return str.substr(0, str.find('>'));
-#else
-      std::string_view str = GLZ_PRETTY_FUNCTION;
-      str = str.substr(str.rfind("= ") + 2);
       return str.substr(0, str.find(']'));
 #endif
    }

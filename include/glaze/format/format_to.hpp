@@ -9,8 +9,8 @@
 
 namespace glz
 {
-   template <num_t T>
-   void format_to(std::string& buffer, T&& value)
+   template <detail::num_t T>
+   void format_to(std::string& buffer, T&& value) noexcept
    {
       auto ix = buffer.size();
       buffer.resize((std::max)(buffer.size() * 2, ix + 64));

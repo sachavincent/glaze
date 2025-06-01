@@ -6,22 +6,14 @@
 struct my_functions
 {
    std::function<void()> hello = [] { std::printf("Hello\n"); };
-
-   void member_function() { std::printf("Member Function!\n"); }
-
-   void const_member_function() const { std::printf("const Member Function!\n"); }
-
-   std::string dump() { return "dumping\n"; }
-
-   void input(int i) { std::printf("i: %d\n", i); }
+   std::function<void()> world = [] { std::printf("World\n"); };
 };
 
 template <>
 struct glz::meta<my_functions>
 {
    using T = my_functions;
-   static constexpr auto value =
-      object("hi", &T::hello, &T::member_function, &T::const_member_function, &T::dump, &T::input);
+   static constexpr auto value = object("hi", &T::hello, &T::world);
 };
 
 struct four_t

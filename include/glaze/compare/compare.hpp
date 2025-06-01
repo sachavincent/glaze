@@ -6,25 +6,24 @@
 #include <functional>
 
 #include "glaze/core/common.hpp"
-#include "glaze/core/reflect.hpp"
 
 namespace glz
 {
    struct equal_to final
    {
-      template <glaze_object_t T>
+      template <detail::glaze_object_t T>
       constexpr bool operator()(T&& lhs, T&& rhs) noexcept
       {
          if constexpr (std::equality_comparable<T>) {
             return lhs == rhs;
          }
          else {
-            constexpr auto N = reflect<T>::size;
+            constexpr auto N = glz::tuple_size_v<meta_t<T>>;
 
             bool equal = true;
-            for_each_short_circuit<N>([&]<auto I>() {
-               auto& l = get_member(lhs, get<I>(reflect<T>::values));
-               auto& r = get_member(rhs, get<I>(reflect<T>::values));
+            for_each_short_circuit<N>([&](auto I) {
+               auto& l = detail::get_member(lhs, get<1>(get<I>(meta_v<T>)));
+               auto& r = detail::get_member(rhs, get<1>(get<I>(meta_v<T>)));
                if (!std::equal_to{}(l, r)) {
                   equal = false;
                   return true; // exit
@@ -39,15 +38,15 @@ namespace glz
 
    struct less final
    {
-      template <glaze_object_t T>
+      template <detail::glaze_object_t T>
       constexpr bool operator()(T&& lhs, T&& rhs) noexcept
       {
-         constexpr auto N = reflect<T>::size;
+         constexpr auto N = glz::tuple_size_v<meta_t<T>>;
 
          bool less_than = true;
-         for_each_short_circuit<N>([&]<auto I>() {
-            auto& l = get_member(lhs, get<I>(reflect<T>::values));
-            auto& r = get_member(rhs, get<I>(reflect<T>::values));
+         for_each_short_circuit<N>([&](auto I) {
+            auto& l = detail::get_member(lhs, get<1>(get<I>(meta_v<T>)));
+            auto& r = detail::get_member(rhs, get<1>(get<I>(meta_v<T>)));
             if (!std::less{}(l, r)) {
                less_than = false;
                return true; // exit
@@ -61,15 +60,15 @@ namespace glz
 
    struct less_equal final
    {
-      template <glaze_object_t T>
+      template <detail::glaze_object_t T>
       constexpr bool operator()(T&& lhs, T&& rhs) noexcept
       {
-         constexpr auto N = reflect<T>::size;
+         constexpr auto N = glz::tuple_size_v<meta_t<T>>;
 
          bool less_than = true;
-         for_each_short_circuit<N>([&]<auto I>() {
-            auto& l = get_member(lhs, get<I>(reflect<T>::values));
-            auto& r = get_member(rhs, get<I>(reflect<T>::values));
+         for_each_short_circuit<N>([&](auto I) {
+            auto& l = detail::get_member(lhs, get<1>(get<I>(meta_v<T>)));
+            auto& r = detail::get_member(rhs, get<1>(get<I>(meta_v<T>)));
             if (!std::less_equal{}(l, r)) {
                less_than = false;
                return true; // exit
@@ -83,15 +82,15 @@ namespace glz
 
    struct greater final
    {
-      template <glaze_object_t T>
+      template <detail::glaze_object_t T>
       constexpr bool operator()(T&& lhs, T&& rhs) noexcept
       {
-         constexpr auto N = reflect<T>::size;
+         constexpr auto N = glz::tuple_size_v<meta_t<T>>;
 
          bool greater_than = true;
-         for_each_short_circuit<N>([&]<auto I>() {
-            auto& l = get_member(lhs, get<I>(reflect<T>::values));
-            auto& r = get_member(rhs, get<I>(reflect<T>::values));
+         for_each_short_circuit<N>([&](auto I) {
+            auto& l = detail::get_member(lhs, get<1>(get<I>(meta_v<T>)));
+            auto& r = detail::get_member(rhs, get<1>(get<I>(meta_v<T>)));
             if (!std::greater{}(l, r)) {
                greater_than = false;
                return true; // exit
@@ -105,15 +104,15 @@ namespace glz
 
    struct greater_equal final
    {
-      template <glaze_object_t T>
+      template <detail::glaze_object_t T>
       constexpr bool operator()(T&& lhs, T&& rhs) noexcept
       {
-         constexpr auto N = reflect<T>::size;
+         constexpr auto N = glz::tuple_size_v<meta_t<T>>;
 
          bool greater_than = true;
-         for_each_short_circuit<N>([&]<auto I>() {
-            auto& l = get_member(lhs, get<I>(reflect<T>::values));
-            auto& r = get_member(rhs, get<I>(reflect<T>::values));
+         for_each_short_circuit<N>([&](auto I) {
+            auto& l = detail::get_member(lhs, get<1>(get<I>(meta_v<T>)));
+            auto& r = detail::get_member(rhs, get<1>(get<I>(meta_v<T>)));
             if (!std::greater_equal{}(l, r)) {
                greater_than = false;
                return true; // exit

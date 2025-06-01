@@ -25,7 +25,7 @@ ut::suite valid_vector_test_cases_server = [] {
          // No id is valid
          R"({"jsonrpc": "2.0","method": "add", "params": [1, 2, 3]})", ""),
       std::pair(R"({"jsonrpc": "2.0","method": "add", "params": [1, 2, 3],"id": null})", ""),
-      std::pair(R"({"jsonrpc": "2.0","method": "add", "params": [1, 2, 3],"id": 2})",
+      std::pair(R"({"jsonrpc": "2.0","method": "add", "params": [1, 2, 3],"id": 2.0})",
                 R"({"jsonrpc": "2.0","result": 6, "id": 2})"),
       std::pair(R"({"jsonrpc": "2.0","method": "add","params": [1, 2, 3],"id": "some_client_22"})",
                 R"({"jsonrpc": "2.0","result": 6, "id": "some_client_22"})")};
@@ -153,7 +153,7 @@ ut::suite struct_test_cases = [] {
       bool called{};
       auto request_str{client.request<"bar">(
          "bar-uuid", bar_params{.bar_a = 1337, .bar_b = "hello world"},
-         [&called](const glz::expected<bar_result, rpc::error>& value, const rpc::id_t& id) -> void {
+         [&called](glz::expected<bar_result, rpc::error> const& value, rpc::id_t const& id) -> void {
             called = true;
             ut::expect(value.has_value());
             ut::expect(value.value() == bar_result{.bar_c = true, .bar_d = "new world"});
@@ -328,7 +328,7 @@ ut::suite struct_test_cases = [] {
       // Note one of the requests is a valid notification(no id) a response won't be generated for it
       ut::expect(
          response ==
-         R"([{"jsonrpc":"2.0","result":{"foo_c":false,"foo_d":""},"id":"42"},{"jsonrpc":"2.0","result":{"bar_c":false,"bar_d":""},"id":"bar-uuid"},{"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found","data":"Method: 'invalid_method_name' not found"},"id":"2"},{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request","data":"1:3: unknown_key\n   {\"foo\": \"boo\"}\n     ^"},"id":null},{"jsonrpc":"2.0","result":{"foo_c":false,"foo_d":""},"id":"4222222"},{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request","data":"1:19: unknown_key\n   {\"jsonrpc\":\"2.0\",\"invalid_method_key\":\"foo\",\"params\":{},\"id\":\"42\n                     ^"},"id":"4222222"}])")
+         R"([{"jsonrpc":"2.0","result":{"foo_c":false,"foo_d":""},"id":"42"},{"jsonrpc":"2.0","result":{"bar_c":false,"bar_d":""},"id":"bar-uuid"},{"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found","data":"Method: 'invalid_method_name' not found"},"id":"2"},{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request","data":"1:4: unknown_key\n   {\"foo\": \"boo\"}\n      ^"},"id":null},{"jsonrpc":"2.0","result":{"foo_c":false,"foo_d":""},"id":"4222222"},{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request","data":"1:21: unknown_key\n   {\"jsonrpc\":\"2.0\",\"invalid_method_key\":\"foo\",\"params\":{},\"id\":\"42\n                       ^"},"id":"4222222"}])")
          << response;
    };
 

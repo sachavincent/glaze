@@ -11,8 +11,8 @@ namespace glz
 {
    namespace detail
    {
-      template <auto Opts>
-      inline void prettify_json(is_context auto&& ctx, auto&& it, auto&& end, auto&& b, auto&& ix)
+      template <opts Opts>
+      inline void prettify_json(is_context auto&& ctx, auto&& it, auto&& end, auto&& b, auto&& ix) noexcept
       {
          constexpr bool use_tabs = Opts.indentation_char == '\t';
          constexpr auto indent_width = Opts.indentation_width;
@@ -23,10 +23,10 @@ namespace glz
          int64_t indent{};
 
          while (it < end) {
-            switch (json_types[uint8_t(*it)]) {
+            switch (json_types[size_t(*it)]) {
             case String: {
                const auto value = read_json_string<Opts>(it, end);
-               dump_maybe_empty(value, b, ix);
+               dump_not_empty(value, b, ix);
                break;
             }
             case Comma: {
@@ -51,7 +51,7 @@ namespace glz
                break;
             }
             case Number: {
-               const auto value = read_json_number<Opts.null_terminated>(it, end);
+               const auto value = read_json_number(it);
                dump_not_empty(value, b, ix);
                break;
             }
@@ -69,20 +69,13 @@ namespace glz
                dump<'['>(b, ix);
                ++it;
                ++indent;
+               state[indent] = Array_Start;
                if (size_t(indent) >= state.size()) [[unlikely]] {
                   state.resize(state.size() * 2);
                }
-               state[indent] = Array_Start;
                if constexpr (Opts.new_lines_in_arrays) {
-                  if constexpr (not Opts.null_terminated) {
-                     if (it != end && *it != ']') {
-                        append_new_line<use_tabs, indent_width>(b, ix, indent);
-                     }
-                  }
-                  else {
-                     if (*it != ']') {
-                        append_new_line<use_tabs, indent_width>(b, ix, indent);
-                     }
+                  if (*it != ']') {
+                     append_new_line<use_tabs, indent_width>(b, ix, indent);
                   }
                }
                break;
@@ -123,19 +116,12 @@ namespace glz
                dump<'{'>(b, ix);
                ++it;
                ++indent;
+               state[indent] = Object_Start;
                if (size_t(indent) >= state.size()) [[unlikely]] {
                   state.resize(state.size() * 2);
                }
-               state[indent] = Object_Start;
-               if constexpr (not Opts.null_terminated) {
-                  if (it != end && *it != '}') [[unlikely]] {
-                     append_new_line<use_tabs, indent_width>(b, ix, indent);
-                  }
-               }
-               else {
-                  if (*it != '}') {
-                     append_new_line<use_tabs, indent_width>(b, ix, indent);
-                  }
+               if (*it != '}') {
+                  append_new_line<use_tabs, indent_width>(b, ix, indent);
                }
                break;
             }
@@ -162,16 +148,17 @@ namespace glz
                   [[fallthrough]];
                }
             }
-            [[unlikely]] default: {
-               ctx.error = error_code::syntax_error;
-               return;
-            }
+               [[unlikely]] default:
+               {
+                  ctx.error = error_code::syntax_error;
+                  return;
+               }
             }
          }
       }
 
-      template <auto Opts, contiguous In, output_buffer Out>
-      inline void prettify_json(is_context auto&& ctx, In&& in, Out&& out)
+      template <opts Opts, contiguous In, output_buffer Out>
+      inline void prettify_json(is_context auto&& ctx, In&& in, Out&& out) noexcept
       {
          if constexpr (resizable<Out>) {
             if (in.empty()) {
@@ -181,18 +168,11 @@ namespace glz
             out.resize(in.size() * 2);
          }
          size_t ix = 0;
-         auto [it, end] = read_iterators<Opts>(in);
+         auto [it, end] = read_iterators<Opts>(ctx, in);
          if (bool(ctx.error)) [[unlikely]] {
             return;
          }
-
-         if constexpr (string_t<In>) {
-            prettify_json<opt_true<Opts, &opts::null_terminated>>(ctx, it, end, out, ix);
-         }
-         else {
-            prettify_json<opt_false<Opts, &opts::null_terminated>>(ctx, it, end, out, ix);
-         }
-
+         prettify_json<Opts>(ctx, it, end, out, ix);
          if constexpr (resizable<Out>) {
             out.resize(ix);
          }
@@ -203,8 +183,8 @@ namespace glz
    // should not happen since we prettify auto-generated JSON.
    // The detail version can be used if error context is needed
 
-   template <auto Opts = opts{}>
-   inline void prettify_json(const auto& in, auto& out)
+   template <opts Opts = opts{}>
+   inline void prettify_json(const auto& in, auto& out) noexcept
    {
       context ctx{};
       detail::prettify_json<Opts>(ctx, in, out);
@@ -213,8 +193,8 @@ namespace glz
    /// <summary>
    /// allocating version of prettify
    /// </summary>
-   template <auto Opts = opts{}>
-   inline std::string prettify_json(const auto& in)
+   template <opts Opts = opts{}>
+   inline std::string prettify_json(const auto& in) noexcept
    {
       context ctx{};
       std::string out{};
@@ -222,8 +202,8 @@ namespace glz
       return out;
    }
 
-   template <auto Opts = opts{}>
-   inline void prettify_jsonc(const auto& in, auto& out)
+   template <opts Opts = opts{}>
+   inline void prettify_jsonc(const auto& in, auto& out) noexcept
    {
       context ctx{};
       detail::prettify_json<opt_true<Opts, &opts::comments>>(ctx, in, out);
@@ -232,8 +212,8 @@ namespace glz
    /// <summary>
    /// allocating version of prettify
    /// </summary>
-   template <auto Opts = opts{}>
-   inline std::string prettify_jsonc(const auto& in)
+   template <opts Opts = opts{}>
+   inline std::string prettify_jsonc(const auto& in) noexcept
    {
       context ctx{};
       std::string out{};

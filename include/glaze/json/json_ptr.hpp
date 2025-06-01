@@ -20,33 +20,28 @@ namespace glz
       return key.find_first_not_of("0123456789") == std::string_view::npos;
    }
 
-   template <string_literal JsonPointer, auto Opts = opts{}>
+   template <string_literal Str, auto Opts = opts{}>
    [[nodiscard]] inline auto get_view_json(contiguous auto&& buffer)
    {
-      static constexpr auto S = chars<JsonPointer>;
-      static constexpr auto tokens = split_json_ptr<S>();
+      static constexpr auto s = chars<Str>;
+
+      static constexpr auto tokens = split_json_ptr<s>();
       static constexpr auto N = tokens.size();
 
       context ctx{};
-      auto p = read_iterators<Opts>(buffer);
+      auto p = read_iterators<Opts>(ctx, buffer);
 
       auto it = p.first;
       auto end = p.second;
 
-      // Don't automatically const qualify the buffer so we can write to the view,
-      // which allows us to write to a JSON Pointer location
-      using span_t =
-         std::span<std::conditional_t<std::is_const_v<std::remove_pointer_t<decltype(it)>>, const char, char>>;
+      // using span_t = std::span<std::remove_pointer_t<std::remove_reference_t<decltype(it)>>>;
+      using span_t = std::span<const char>; // TODO: should be more generic, but currently broken with mingw
       using result_t = expected<span_t, error_ctx>;
 
       auto start = it;
 
-      if (buffer.empty()) [[unlikely]] {
-         ctx.error = error_code::no_read_input;
-      }
-
       if (bool(ctx.error)) [[unlikely]] {
-         return result_t{unexpected(error_ctx{ctx.error})};
+         return result_t{unexpected(error_ctx{ctx.error, 0})};
       }
 
       if constexpr (N == 0) {
@@ -59,41 +54,26 @@ namespace glz
 
          result_t ret;
 
-         for_each<N>([&]<size_t I>() {
+         for_each<N>([&](auto I) {
             if (bool(ctx.error)) [[unlikely]] {
                return;
             }
 
-            static constexpr auto key = tokens[I];
+            static constexpr auto key = std::get<I>(tokens);
             if constexpr (maybe_numeric_key(key)) {
                switch (*it) {
                case '{': {
                   ++it;
                   while (true) {
-                     if (skip_ws<Opts>(ctx, it, end)) {
+                     GLZ_SKIP_WS;
+                     const auto k = parse_key(ctx, it, end);
+                     if (bool(ctx.error)) [[unlikely]] {
                         return;
                      }
-                     if (match<'"'>(ctx, it)) {
-                        return;
-                     }
-
-                     auto* start = it;
-                     skip_string_view<Opts>(ctx, it, end);
-                     if (bool(ctx.error)) [[unlikely]]
-                        return;
-                     const sv k = {start, size_t(it - start)};
-                     ++it;
-
-                     if (key.size() == k.size() && comparitor<key>(k.data())) {
-                        if (skip_ws<Opts>(ctx, it, end)) {
-                           return;
-                        }
-                        if (match_invalid_end<':', Opts>(ctx, it, end)) {
-                           return;
-                        }
-                        if (skip_ws<Opts>(ctx, it, end)) {
-                           return;
-                        }
+                     if (cx_string_cmp<key>(k)) {
+                        GLZ_SKIP_WS;
+                        GLZ_MATCH_COLON;
+                        GLZ_SKIP_WS;
 
                         if constexpr (I == (N - 1)) {
                            ret = parse_value<Opts>(ctx, it, end);
@@ -101,7 +81,7 @@ namespace glz
                         return;
                      }
                      else {
-                        skip_value<JSON>::op<Opts>(ctx, it, end);
+                        skip_value<Opts>(ctx, it, end);
                         if (bool(ctx.error)) [[unlikely]] {
                            return;
                         }
@@ -118,8 +98,8 @@ namespace glz
                   // Could optimize by counting commas
                   static constexpr auto n = stoui(key);
                   if constexpr (n) {
-                     for_each<n.value()>([&]<size_t>() {
-                        skip_value<JSON>::op<Opts>(ctx, it, end);
+                     for_each<n.value()>([&](auto) {
+                        skip_value<Opts>(ctx, it, end);
                         if (bool(ctx.error)) [[unlikely]] {
                            return;
                         }
@@ -130,9 +110,7 @@ namespace glz
                         ++it;
                      });
 
-                     if (skip_ws<Opts>(ctx, it, end)) {
-                        return;
-                     }
+                     GLZ_SKIP_WS;
 
                      if constexpr (I == (N - 1)) {
                         ret = parse_value<Opts>(ctx, it, end);
@@ -147,35 +125,19 @@ namespace glz
                }
             }
             else {
-               if (match_invalid_end<'{', Opts>(ctx, it, end)) {
-                  return;
-               }
+               GLZ_MATCH_OPEN_BRACE;
 
                while (it < end) {
-                  if (skip_ws<Opts>(ctx, it, end)) {
-                     return;
-                  }
-                  if (match<'"'>(ctx, it)) {
+                  GLZ_SKIP_WS;
+                  const auto k = parse_key(ctx, it, end);
+                  if (bool(ctx.error)) [[unlikely]] {
                      return;
                   }
 
-                  auto* start = it;
-                  skip_string_view<Opts>(ctx, it, end);
-                  if (bool(ctx.error)) [[unlikely]]
-                     return;
-                  const sv k = {start, size_t(it - start)};
-                  ++it;
-
-                  if (key.size() == k.size() && comparitor<key>(k.data())) {
-                     if (skip_ws<Opts>(ctx, it, end)) {
-                        return;
-                     }
-                     if (match_invalid_end<':', Opts>(ctx, it, end)) {
-                        return;
-                     }
-                     if (skip_ws<Opts>(ctx, it, end)) {
-                        return;
-                     }
+                  if (cx_string_cmp<key>(k)) {
+                     GLZ_SKIP_WS;
+                     GLZ_MATCH_COLON;
+                     GLZ_SKIP_WS;
 
                      if constexpr (I == (N - 1)) {
                         ret = parse_value<Opts>(ctx, it, end);
@@ -183,7 +145,7 @@ namespace glz
                      return;
                   }
                   else {
-                     skip_value<JSON>::op<Opts>(ctx, it, end);
+                     skip_value<Opts>(ctx, it, end);
                      if (bool(ctx.error)) [[unlikely]] {
                         return;
                      }
@@ -198,7 +160,7 @@ namespace glz
          });
 
          if (bool(ctx.error)) [[unlikely]] {
-            return result_t{unexpected(error_ctx{ctx.error, "", size_t(it - start)})};
+            return result_t{unexpected(error_ctx{ctx.error, size_t(it - start)})};
          }
 
          return ret;
@@ -223,23 +185,5 @@ namespace glz
          return sv{reinterpret_cast<const char*>(s->data()), s->size()};
       }
       return unexpected(s.error());
-   }
-
-   // Write raw text to a JSON value denoted by a JSON Pointer
-   template <string_literal Path, auto Opts = opts{}>
-   [[nodiscard]] inline error_ctx write_at(const std::string_view value, contiguous auto&& buffer)
-   {
-      auto view = glz::get_view_json<Path, Opts>(buffer);
-      if (view) {
-         // erase the current value
-         const size_t location = size_t(view->data() - buffer.data());
-         buffer.erase(location, view->size());
-         // insert the new value
-         buffer.insert(location, value);
-         return {};
-      }
-      else {
-         return view.error();
-      }
    }
 }

@@ -52,7 +52,7 @@ namespace glz
    template <class T1, class T2>
    pair(T1, T2) -> pair<T1, T2>;
 
-   template <size_t I, pair_t T>
+   template <size_t I, detail::pair_t T>
    constexpr decltype(auto) get(T&& p) noexcept
    {
       if constexpr (I == 0) {
@@ -67,20 +67,21 @@ namespace glz
    }
 }
 
-namespace glz
+namespace glz::detail
 {
-   inline constexpr size_t naive_map_max_size = 128;
+   constexpr size_t naive_map_max_size = 32;
 
    struct naive_map_desc
    {
       size_t N{};
       uint64_t seed{};
       size_t bucket_size{};
+      bool use_hash_comparison = false;
       size_t min_length = (std::numeric_limits<size_t>::max)();
       size_t max_length{};
    };
 
-   inline constexpr uint64_t to_uint64_n_below_8(const char* bytes, const size_t N) noexcept
+   constexpr uint64_t to_uint64_n_below_8(const char* bytes, const size_t N) noexcept
    {
       static_assert(std::endian::native == std::endian::little);
       uint64_t res{};
@@ -176,12 +177,22 @@ namespace glz
    // we keep generating seeds until its perfect. This allows for the usage of fast
    // but terible hashing algs.
    // This is one such terible hashing alg
+   template <bool use_hash_comparison>
    struct naive_hash final
    {
       static inline constexpr uint64_t bitmix(uint64_t h) noexcept
       {
-         h *= 0x9FB21C651E98DF25L;
-         h ^= std::rotr(h, 49);
+         if constexpr (use_hash_comparison) {
+            h ^= (h >> 33);
+            h *= 0xff51afd7ed558ccdL;
+            h ^= (h >> 33);
+            h *= 0xc4ceb9fe1a85ec53L;
+            h ^= (h >> 33);
+         }
+         else {
+            h *= 0x9FB21C651E98DF25L;
+            h ^= std::rotr(h, 49);
+         }
          return h;
       };
 
@@ -260,11 +271,10 @@ namespace glz
       }
    };
 
-   // Check if a size_t value exists inside of a container like std::array<size_t, N>
-   // Using a pointer and size rather than std::span for faster compile times
-   constexpr bool contains(const size_t* data, const size_t size, const size_t val) noexcept
+   constexpr bool contains(auto&& data, auto&& val) noexcept
    {
-      for (size_t i = 0; i < size; ++i) {
+      const auto n = data.size();
+      for (size_t i = 0; i < n; ++i) {
          if (data[i] == val) {
             return true;
          }
@@ -272,7 +282,7 @@ namespace glz
       return false;
    }
 
-   template <size_t N>
+   template <bool use_hash_comparison, size_t N>
       requires(N <= naive_map_max_size)
    constexpr naive_map_desc naive_map_hash(const std::array<std::string_view, N>& v) noexcept
    {
@@ -283,6 +293,7 @@ namespace glz
       // This uses 512 bytes for 32 keys.
       // Keeping the bucket size a power of 2 probably makes the modulus more efficient.
       desc.bucket_size = (N == 1) ? 1 : std::bit_ceil(N * N) / 2;
+      desc.use_hash_comparison = use_hash_comparison;
       auto& seed = desc.seed;
 
       for (size_t i = 0; i < N; ++i) {
@@ -303,12 +314,12 @@ namespace glz
             seed = gen();
             size_t index = 0;
             for (const auto& key : v) {
-               const auto hash = naive_hash{}(key, seed);
+               const auto hash = naive_hash<use_hash_comparison>{}(key, seed);
                if (hash == seed) {
                   break;
                }
                const auto bucket = hash % desc.bucket_size;
-               if (contains(bucket_index.data(), index, bucket)) {
+               if (contains(std::span{bucket_index.data(), index}, bucket)) {
                   break;
                }
                bucket_index[index] = bucket;
@@ -318,7 +329,7 @@ namespace glz
             if (index == N) {
                // make sure the seed does not collide with any hashes
                const auto bucket = seed % desc.bucket_size;
-               if (not contains(bucket_index.data(), N, bucket)) {
+               if (not contains(std::span{bucket_index.data(), N}, bucket)) {
                   return; // found working seed
                }
             }
@@ -344,8 +355,9 @@ namespace glz
       // Birthday paradox makes this unsuitable for large numbers of keys without
       // using a ton of memory.
       static constexpr auto N = D.N;
-      using hash_alg = naive_hash;
+      using hash_alg = naive_hash<D.use_hash_comparison>;
       std::array<pair<std::string_view, Value>, N> items{};
+      std::array<uint64_t, N * D.use_hash_comparison> hashes{};
       std::array<uint8_t, D.bucket_size> table{};
 
       constexpr decltype(auto) begin() const noexcept { return items.begin(); }
@@ -359,9 +371,17 @@ namespace glz
          // constexpr bucket_size means the compiler can replace the modulos with
          // more efficient instructions So this is not as expensive as this looks
          const auto index = table[hash % D.bucket_size];
-         const auto& item = items[index];
-         if (!compare_sv(item.first, key)) [[unlikely]]
-            return items.end();
+         if constexpr (D.use_hash_comparison) {
+            // Odds of having a uint64_t hash collision extremely small for naive map sizes
+            // And no valid/known keys could colide becuase of perfect hashing
+            if (hashes[index] != hash) [[unlikely]]
+               return items.end();
+         }
+         else {
+            const auto& item = items[index];
+            if (!compare_sv(item.first, key)) [[unlikely]]
+               return items.end();
+         }
          return items.begin() + index;
       }
    };
@@ -372,10 +392,13 @@ namespace glz
    {
       naive_map<T, D> ht{pairs};
 
-      using hash_alg = naive_hash;
+      using hash_alg = naive_hash<D.use_hash_comparison>;
 
       for (size_t i = 0; i < D.N; ++i) {
          const auto hash = hash_alg{}.template operator()<D>(pairs[i].first);
+         if constexpr (D.use_hash_comparison) {
+            ht.hashes[i] = hash;
+         }
          ht.table[hash % D.bucket_size] = uint8_t(i);
       }
 
@@ -402,13 +425,13 @@ namespace glz
       }
    }
 
-   template <class Key, class Value, size_t N>
+   template <class Key, class Value, size_t N, bool use_hash_comparison = false>
    struct normal_map
    {
       // From serge-sans-paille/frozen
       static constexpr uint64_t storage_size = std::bit_ceil(N) * (N < 32 ? 2 : 1);
       static constexpr auto max_bucket_size = 2 * std::bit_width(N);
-      using hash_alg = naive_hash;
+      using hash_alg = naive_hash<use_hash_comparison>;
       uint64_t seed{};
       // The extra info in the bucket most likely does not need to be 64 bits
       std::array<int64_t, N> buckets{};
@@ -434,20 +457,26 @@ namespace glz
          // more efficient instructions So this is not as expensive as this looks
          const auto extra = buckets[hash % N];
          const size_t index = extra < 1 ? -extra : table[combine(hash, extra) % storage_size];
-
-         if (index >= N) [[unlikely]] {
-            return items.end();
-         }
-         const auto& item = items[index];
-         if constexpr (std::integral<Key>) {
-            if (item.first != key) [[unlikely]]
+         if constexpr (!std::integral<Key> && use_hash_comparison) {
+            // Odds of having a uint64_t hash collision is pretty small
+            // And no valid/known keys could colide becuase of perfect hashing
+            if (hashes[index] != hash) [[unlikely]]
                return items.end();
          }
          else {
-            if (!compare_sv(item.first, key)) [[unlikely]]
+            if (index >= N) [[unlikely]] {
                return items.end();
+            }
+            const auto& item = items[index];
+            if constexpr (std::integral<Key>) {
+               if (item.first != key) [[unlikely]]
+                  return items.end();
+            }
+            else {
+               if (!compare_sv(item.first, key)) [[unlikely]]
+                  return items.end();
+            }
          }
-
          return items.begin() + index;
       }
 
@@ -456,20 +485,24 @@ namespace glz
          const auto hash = hash_alg{}(key, seed);
          const auto extra = buckets[hash % N];
          const size_t index = extra < 1 ? -extra : table[combine(hash, extra) % storage_size];
-
-         if (index >= N) [[unlikely]] {
-            return items.end();
-         }
-         const auto& item = items[index];
-         if constexpr (std::integral<Key>) {
-            if (item.first != key) [[unlikely]]
+         if constexpr (!std::integral<Key> && use_hash_comparison) {
+            if (hashes[index] != hash) [[unlikely]]
                return items.end();
          }
          else {
-            if (!compare_sv(item.first, key)) [[unlikely]]
+            if (index >= N) [[unlikely]] {
                return items.end();
+            }
+            const auto& item = items[index];
+            if constexpr (std::integral<Key>) {
+               if (item.first != key) [[unlikely]]
+                  return items.end();
+            }
+            else {
+               if (!compare_sv(item.first, key)) [[unlikely]]
+                  return items.end();
+            }
          }
-
          return items.begin() + index;
       }
 
@@ -483,68 +516,67 @@ namespace glz
          if constexpr (N == 0) {
             return;
          }
-         else {
-            std::array<std::array<storage_type, max_bucket_size>, N> full_buckets{};
-            std::array<size_t, N> bucket_sizes{};
-            naive_prng gen{};
 
-            bool failed;
+         std::array<std::array<storage_type, max_bucket_size>, N> full_buckets{};
+         std::array<size_t, N> bucket_sizes{};
+         detail::naive_prng gen{};
+
+         bool failed;
+         do {
+            failed = false;
+            seed = gen() + 1;
+            for (storage_type i{}; i < N; ++i) {
+               const auto hash = hash_alg{}(items[i].first, seed);
+               if (hash == seed) {
+                  failed = true;
+                  break;
+               }
+               hashes[i] = hash;
+               const auto bucket = hash % N;
+               const auto bucket_size = bucket_sizes[bucket]++;
+               if (bucket_size == max_bucket_size) {
+                  failed = true;
+                  bucket_sizes = {};
+                  break;
+               }
+               else {
+                  full_buckets[bucket][bucket_size] = i;
+               }
+            }
+         } while (failed);
+
+         std::array<size_t, N> buckets_index{};
+         std::iota(buckets_index.begin(), buckets_index.end(), 0);
+         std::sort(buckets_index.begin(), buckets_index.end(),
+                   [&bucket_sizes](size_t i1, size_t i2) { return bucket_sizes[i1] > bucket_sizes[i2]; });
+
+         constexpr auto unknown_key_indice = N;
+         std::fill(table.begin(), table.end(), storage_type(unknown_key_indice));
+         for (auto bucket_index : buckets_index) {
+            const auto bucket_size = bucket_sizes[bucket_index];
+            if (bucket_size < 1) break;
+            if (bucket_size == 1) {
+               buckets[bucket_index] = -int64_t(full_buckets[bucket_index][0]);
+               continue;
+            }
+            const auto table_old = table;
             do {
                failed = false;
-               seed = gen() + 1;
-               for (storage_type i{}; i < N; ++i) {
-                  const auto hash = hash_alg{}(items[i].first, seed);
-                  if (hash == seed) {
+               // We need to reserve top bit for bucket_size == 1
+               const auto secondary_seed = gen() >> 1;
+               for (size_t i = 0; i < bucket_size; ++i) {
+                  const auto index = full_buckets[bucket_index][i];
+                  const auto hash = hashes[index];
+                  const auto slot = combine(hash, secondary_seed) % storage_size;
+                  if (table[slot] != unknown_key_indice) {
                      failed = true;
+                     table = table_old;
                      break;
                   }
-                  hashes[i] = hash;
-                  const auto bucket = hash % N;
-                  const auto bucket_size = bucket_sizes[bucket]++;
-                  if (bucket_size == max_bucket_size) {
-                     failed = true;
-                     bucket_sizes = {};
-                     break;
-                  }
-                  else {
-                     full_buckets[bucket][bucket_size] = i;
-                  }
+                  table[slot] = index;
                }
+               buckets[bucket_index] = secondary_seed;
             } while (failed);
-
-            std::array<size_t, N> buckets_index{};
-            std::iota(buckets_index.begin(), buckets_index.end(), 0);
-            std::sort(buckets_index.begin(), buckets_index.end(),
-                      [&bucket_sizes](size_t i1, size_t i2) { return bucket_sizes[i1] > bucket_sizes[i2]; });
-
-            constexpr auto unknown_key_indice = N;
-            std::fill(table.begin(), table.end(), storage_type(unknown_key_indice));
-            for (auto bucket_index : buckets_index) {
-               const auto bucket_size = bucket_sizes[bucket_index];
-               if (bucket_size < 1) break;
-               if (bucket_size == 1) {
-                  buckets[bucket_index] = -int64_t(full_buckets[bucket_index][0]);
-                  continue;
-               }
-               const auto table_old = table;
-               do {
-                  failed = false;
-                  // We need to reserve top bit for bucket_size == 1
-                  const auto secondary_seed = gen() >> 1;
-                  for (size_t i = 0; i < bucket_size; ++i) {
-                     const auto index = full_buckets[bucket_index][i];
-                     const auto hash = hashes[index];
-                     const auto slot = combine(hash, secondary_seed) % storage_size;
-                     if (table[slot] != unknown_key_indice) {
-                        failed = true;
-                        table = table_old;
-                        break;
-                     }
-                     table[slot] = index;
-                  }
-                  buckets[bucket_index] = secondary_seed;
-               } while (failed);
-            }
          }
       }
    };

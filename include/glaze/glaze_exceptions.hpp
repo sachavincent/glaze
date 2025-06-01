@@ -13,12 +13,12 @@
 
 namespace glz::ex
 {
-   template <auto Opts>
+   template <opts Opts>
    void read(auto& value, auto&& buffer)
    {
       auto ec = glz::read<Opts>(value, buffer);
       if (ec) {
-         if constexpr (Opts.format == JSON) {
+         if constexpr (Opts.format == json) {
             throw std::runtime_error("read error: " + glz::format_error(ec, buffer));
          }
          else {
@@ -27,13 +27,13 @@ namespace glz::ex
       }
    }
 
-   template <auto Opts, class T, output_buffer Buffer>
+   template <opts Opts, class T, output_buffer Buffer>
    void write(T&& value, Buffer& buffer) noexcept
    {
       glz::write<Opts>(std::forward<T>(value), buffer);
    }
 
-   template <auto Opts, class T, raw_buffer Buffer>
+   template <opts Opts, class T, raw_buffer Buffer>
    size_t write(T&& value, Buffer&& buffer) noexcept
    {
       return glz::write<Opts>(std::forward<T>(value), std::forward<Buffer>(buffer));

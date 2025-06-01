@@ -1,9 +1,12 @@
 include(FetchContent)
 
+set(BOOST_UT_ENABLE_RUN_AFTER_BUILD OFF CACHE INTERNAL "")
+set(BOOST_UT_DISABLE_MODULE ON CACHE INTERNAL "")
+
 FetchContent_Declare(
   ut
   GIT_REPOSITORY https://github.com/openalgz/ut
-  GIT_TAG v0.0.5
+  GIT_TAG v0.0.3
   GIT_SHALLOW TRUE
 )
 
@@ -19,25 +22,19 @@ include(../cmake/code-coverage.cmake)
 add_code_coverage_all_targets()
 
 add_library(glz_test_common INTERFACE)
-target_compile_features(glz_test_common INTERFACE cxx_std_23)
+target_compile_features(glz_test_common INTERFACE cxx_std_20)
 target_link_libraries(glz_test_common INTERFACE ut::ut glaze::glaze)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(glz_test_common INTERFACE -fno-exceptions -fno-rtti)
-    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-        if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 13)
-            target_compile_options(glz_test_common INTERFACE -Wall -Wextra -pedantic)
-        else()
-            target_compile_options(glz_test_common INTERFACE -Wall -Wextra -pedantic $<$<CONFIG:Debug>:-Werror>)
-        endif()
-    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         target_compile_options(glz_test_common INTERFACE -Wall -Wextra -pedantic $<$<CONFIG:Debug>:-Werror>)
     else()
         target_compile_options(glz_test_common INTERFACE -Wall -Wextra -pedantic)
     endif()
 
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-      target_compile_options(glz_test_common INTERFACE -ftime-trace -fsanitize=address -fsanitize-address-use-after-scope -fsanitize=undefined)
-      target_link_options(glz_test_common INTERFACE -ftime-trace -fsanitize=address -fsanitize-address-use-after-scope -fsanitize=undefined)
+      target_compile_options(glz_test_common INTERFACE -fsanitize=address -fsanitize-address-use-after-scope -fsanitize=undefined)
+      target_link_options(glz_test_common INTERFACE -fsanitize=address -fsanitize-address-use-after-scope -fsanitize=undefined)
     endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(glz_test_common INTERFACE /GR- /bigobj) #/fsanitize=address
@@ -45,7 +42,7 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 endif()
 
 add_library(glz_test_exceptions INTERFACE)
-target_compile_features(glz_test_exceptions INTERFACE cxx_std_23)
+target_compile_features(glz_test_exceptions INTERFACE cxx_std_20)
 target_link_libraries(glz_test_exceptions INTERFACE ut::ut glaze::glaze)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(glz_test_exceptions INTERFACE)
@@ -57,36 +54,24 @@ endif()
 
 add_subdirectory(asio_repe)
 add_subdirectory(api_test)
-add_subdirectory(beve_test)
+add_subdirectory(binary_test)
 add_subdirectory(cli_menu_test)
 add_subdirectory(compare_test)
 add_subdirectory(csv_test)
 add_subdirectory(eigen_test)
-add_subdirectory(example_json)
 add_subdirectory(exceptions_test)
-add_subdirectory(int_parsing)
-add_subdirectory(jmespath)
 add_subdirectory(json_conformance)
 add_subdirectory(json_performance)
-add_subdirectory(json_reflection_test)
 add_subdirectory(json_test)
 add_subdirectory(jsonrpc_test)
 add_subdirectory(lib_test)
 add_subdirectory(mock_json_test)
+add_subdirectory(stencil_test)
+add_subdirectory(reflection_test)
 add_subdirectory(repe_test)
-add_subdirectory(reflection)
-add_subdirectory(roundtrip)
-add_subdirectory(stencil)
-add_subdirectory(threading_test)
-add_subdirectory(toml_test)
-add_subdirectory(utility_formats)
-if(glaze_EETF_FORMAT)
-    add_subdirectory(eetf_test)
-endif(glaze_EETF_FORMAT)
 
 # We don't run find_package_test or glaze-install_test with MSVC/Windows, because the Github action runner often chokes
-# Don't run find_package on Clang, because Linux runs with Clang try to use GCC standard library and have errors before Clang 18
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     add_test(
     NAME glaze-install_test
     COMMAND
@@ -114,8 +99,6 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     "-Dglaze_ROOT:PATH=${CMAKE_CURRENT_BINARY_DIR}/install"
     "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
     "-DBUILD_TESTING=ON"
-    "$<$<BOOL:${glaze_EETF_FORMAT}>:-Dglaze_EETF_FORMAT=ON>"
-    "$<$<BOOL:${glaze_EETF_FORMAT}>:-DEXTERNAL_MODULE_PATH=${PROJECT_SOURCE_DIR}/cmake>"
     --test-command "${CMAKE_CTEST_COMMAND}" --verbose --output-on-failure # inner ctest command
     )
 

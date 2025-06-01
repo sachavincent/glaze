@@ -19,8 +19,8 @@
 #include "glaze/api/std/vector.hpp"
 #include "glaze/api/tuplet.hpp"
 #include "glaze/api/type_support.hpp"
-#include "glaze/beve/read.hpp"
-#include "glaze/beve/write.hpp"
+#include "glaze/binary/read.hpp"
+#include "glaze/binary/write.hpp"
 #include "glaze/glaze.hpp"
 #include "glaze/json/read.hpp"
 #include "glaze/json/write.hpp"
@@ -44,12 +44,12 @@ namespace glz
          error_ctx pe{};
          bool success;
 
-         if (format == JSON) {
+         if (format == json) {
             success = detail::seek_impl([&](auto&& val) { pe = glz::read<opts{}>(val, data); }, user, path);
          }
          else {
             success =
-               detail::seek_impl([&](auto&& val) { pe = glz::read<opts{.format = BEVE}>(val, data); }, user, path);
+               detail::seek_impl([&](auto&& val) { pe = glz::read<opts{.format = binary}>(val, data); }, user, path);
          }
 
          if (success) {
@@ -64,11 +64,11 @@ namespace glz
       bool write(const uint32_t format, const sv path, std::string& data) noexcept override
       {
          // TODO: Support write errors when seeking
-         if (format == JSON) {
+         if (format == json) {
             return detail::seek_impl([&](auto&& val) { std::ignore = glz::write_json(val, data); }, user, path);
          }
          else {
-            return detail::seek_impl([&](auto&& val) { std::ignore = glz::write_beve(val, data); }, user, path);
+            return detail::seek_impl([&](auto&& val) { std::ignore = glz::write_binary(val, data); }, user, path);
          }
       }
 
@@ -174,7 +174,7 @@ namespace glz
       decltype(auto) unwrap(T&& val)
       {
          using V = std::decay_t<T>;
-         if constexpr (nullable_t<V>) {
+         if constexpr (detail::nullable_t<V>) {
             if (val) {
                return unwrap(*val);
             }
@@ -303,7 +303,7 @@ namespace glz
          using T = std::tuple<Args...>;
 
          constexpr auto N = sizeof...(Args);
-         for_each<N>([&]<auto I>() {
+         for_each<N>([&](auto I) {
             using V = glz::tuple_element_t<I, T>;
             ptr->emplace(name_v<V>, make_api<V>);
          });
